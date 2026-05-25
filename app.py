@@ -83,13 +83,23 @@ def generate():
     
     category_text = f" in the category: {category}" if category != "Any category" else ""
     occasion_text = f" for the occasion: {occasion}" if occasion != "Just a gift" else ""
-    
+
+    budget_ranges = {
+    "Under $20": "between $5 and $20",
+    "Under $50": "between $20 and $50",
+    "Under $100": "between $50 and $100",
+    "Under $200": "between $100 and $200",
+    "Under $500": "between $200 and $500",
+    "$500+": "above $500"
+    }
+    budget_text = budget_ranges.get(budget, budget)
     try:
         message = client.messages.create(
             model="claude-sonnet-4-6",
             max_tokens=2500,
             system=f"""You are an expert gift advisor.
             Always respond in {language}.
+            STRICT BUDGET RULE: ALL gifts MUST be priced within {budget_text}. No exceptions.
             Suggest exactly {gift_count} unique personalized gifts{category_text}{occasion_text}.
             Also generate a short heartfelt dedication message for this occasion.
             Respond ONLY in this exact JSON format, nothing else:
