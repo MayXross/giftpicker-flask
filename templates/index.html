@@ -714,7 +714,13 @@
             <div class="modal-title">❤️ Your Wishlist</div>
             <button class="btn-close" onclick="closeWishlist()">×</button>
         </div>
+        <div style="background:#fff8e1;border:1px solid #ffe082;border-radius:10px;padding:0.6rem 0.85rem;margin-bottom:0.75rem;font-size:0.8rem;color:#7a6000;display:flex;align-items:center;gap:0.5rem;">
+            ⚠️ <span>This wishlist is <strong>temporary</strong> — it disappears when you close the tab. Copy it to save!</span>
+        </div>
         <div id="wishlist-items"></div>
+        <button onclick="copyWishlist()" id="copy-btn" style="width:100%;margin-top:1rem;padding:0.75rem;background:var(--dark);color:#fff;border:none;border-radius:var(--radius);font-size:0.95rem;font-weight:600;cursor:pointer;">
+            📋 Copy list to clipboard
+        </button>
     </div>
 </div>
 
@@ -980,7 +986,16 @@ function keepGift(i) {
 
 function trashGift(i) {
     const card = document.getElementById(`gift-${i}`);
-    card.classList.add('trashed');
+    card.style.transition = 'opacity 0.3s ease, max-height 0.4s ease, margin 0.4s ease, padding 0.4s ease';
+    card.style.opacity = '0';
+    card.style.maxHeight = card.offsetHeight + 'px';
+    setTimeout(() => {
+        card.style.maxHeight = '0';
+        card.style.marginBottom = '0';
+        card.style.padding = '0';
+        card.style.overflow = 'hidden';
+    }, 300);
+    setTimeout(() => card.remove(), 700);
     state.keptGifts = state.keptGifts.filter(g => g.name !== state.gifts[i].name);
     updateWishlistBar();
 }
@@ -1012,6 +1027,25 @@ function openWishlist() {
 
 function closeWishlist() {
     document.getElementById('wishlist-modal').classList.remove('visible');
+}
+
+function copyWishlist() {
+    if (state.keptGifts.length === 0) return;
+    const text = '🎁 My Gift Wishlist\n\n' +
+        state.keptGifts.map((g, i) =>
+            `${i + 1}. ${g.emoji || '🎁'} ${g.name}\n   💰 ${g.price}\n   🛒 Amazon: ${g.amazon_url}\n   🛍️ eBay: ${g.ebay_url}`
+        ).join('\n\n');
+    navigator.clipboard.writeText(text).then(() => {
+        const btn = document.getElementById('copy-btn');
+        btn.textContent = '✅ Copied!';
+        btn.style.background = '#2d6a4f';
+        setTimeout(() => {
+            btn.textContent = '📋 Copy list to clipboard';
+            btn.style.background = 'var(--dark)';
+        }, 2500);
+    }).catch(() => {
+        alert('Copy failed. Please select and copy manually.');
+    });
 }
 
 // ── ALTERNATIVES ──
@@ -1059,9 +1093,9 @@ function showError(msg) {
 }
 
 function resetAll() {
-    state.gifts = []; state.keptGifts = [];
+    state.gifts = [];
+    // keptGifts zachováme – wishlist zostane
     document.getElementById('results-screen').classList.remove('active');
-    document.getElementById('wishlist-bar').classList.remove('visible');
     document.getElementById('recipient').value = '';
     document.getElementById('interests').value = '';
     document.querySelectorAll('.chip.selected').forEach(c => c.classList.remove('selected'));
