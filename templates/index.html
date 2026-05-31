@@ -1020,18 +1020,7 @@ function renderGift(gift, i) {
 }
 
 // ── KEEP / TRASH ──
-function keepGift(i) {
-    const card = document.getElementById(`gift-${i}`);
-    card.classList.add('kept');
-    const gift = state.gifts[i];
-    if (!state.keptGifts.find(g => g.name === gift.name)) {
-        state.keptGifts.push(gift);
-    }
-    updateWishlistBar();
-}
-
-function trashGift(i) {
-    const card = document.getElementById(`gift-${i}`);
+function dismissCard(card) {
     card.style.transition = 'opacity 0.3s ease, max-height 0.4s ease, margin 0.4s ease, padding 0.4s ease';
     card.style.opacity = '0';
     card.style.maxHeight = card.offsetHeight + 'px';
@@ -1042,8 +1031,23 @@ function trashGift(i) {
         card.style.overflow = 'hidden';
     }, 300);
     setTimeout(() => card.remove(), 700);
+}
+
+function keepGift(i) {
+    const card = document.getElementById(`gift-${i}`);
+    const gift = state.gifts[i];
+    if (!state.keptGifts.find(g => g.name === gift.name)) {
+        state.keptGifts.push(gift);
+    }
+    updateWishlistBar();
+    dismissCard(card);
+}
+
+function trashGift(i) {
+    const card = document.getElementById(`gift-${i}`);
     state.keptGifts = state.keptGifts.filter(g => g.name !== state.gifts[i].name);
     updateWishlistBar();
+    dismissCard(card);
 }
 
 function updateWishlistBar() {
