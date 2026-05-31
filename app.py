@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, jsonify, session
+from flask import Flask, render_template, request, jsonify, session, Response, stream_with_context
 from dotenv import load_dotenv
 import anthropic
 import os
@@ -77,11 +77,7 @@ def generate():
     age_text = f" Age: {age}." if age else ""
     relationship_text = f" Relationship: {relationship}." if relationship else ""
 
-    try:
-        message = client.messages.create(
-            model="claude-sonnet-4-6",
-            max_tokens=2500,
-            system=f"""You are an expert gift advisor.
+    system_prompt = f"""You are an expert gift advisor.
             Always respond in {language}.
             STRICT BUDGET RULE: ALL gifts MUST be priced {budget_text}. No exceptions.
             Suggest exactly {gift_count} unique personalized gifts{category_text}{occasion_text}.
@@ -103,44 +99,62 @@ def generate():
                 }}
               ]
             }}
-            Be SPECIFIC. ONLY valid JSON, no extra text.""",
-            messages=[{
-                "role": "user",
-                "content": f"Find {gift_count} gifts for: {recipient}, interests: {interests}, budget: {budget_text}{category_text}{occasion_text}"
-            }]
-        )
+            Be SPECIFIC. ONLY valid JSON, no extra text."""
 
-        raw = message.content[0].text.strip()
-        if raw.startswith("```"):
-            raw = raw.split("```")[1]
-            if raw.startswith("json"):
-                raw = raw[4:]
+    user_msg = f"Find {gift_count} gifts for: {recipient}, interests: {interests}, budget: {budget_text}{category_text}{occasion_text}"
 
-        result = json.loads(raw)
-        gifts = result.get("gifts", [])
-        dedication = result.get("dedication", "")
-        profile_desc = result.get("profile_desc", "")
+    def stream():
+        full_text = ""
+        try:
+            with client.messages.stream(
+                model="claude-sonnet-4-6",
+                max_tokens=2500,
+                system=system_prompt,
+                messages=[{"role": "user", "content": user_msg}]
+            ) as stream_obj:
+                for text_chunk in stream_obj.text_stream:
+                    full_text += text_chunk
+                    # Count gift objects found so far to estimate progress
+                    gifts_found = full_text.count('"name"')
+                    progress = min(95, int((gifts_found / gift_count) * 90) + 5)
+                    yield f"data: {json.dumps({'type': 'progress', 'value': progress})}
 
-        session['request_count'] = session.get('request_count', 0) + 1
+"
 
-        affiliate = "giftpickera00-20"
-        ebay_campaign = "5339153077"
-        ebay_publisher = "7298517"
+            # Parse complete response
+            raw = full_text.strip()
+            if raw.startswith("```"):
+                raw = raw.split("```")[1]
+                if raw.startswith("json"):
+                    raw = raw[4:]
 
-        for gift in gifts:
-            search = gift['amazon_search'].replace(' ', '+')
-            gift['amazon_url'] = f"https://amazon.com/s?k={search}&tag={affiliate}&language=en_US"
-            gift['ebay_url'] = f"https://www.ebay.com/sch/i.html?_nkw={search}&mkcid=1&mkrid=711-53200-19255-0&siteid=0&campid={ebay_campaign}&customid=&toolid=10001&mkevt=1&pub={ebay_publisher}"
+            result = json.loads(raw)
+            gifts = result.get("gifts", [])
+            dedication = result.get("dedication", "")
+            profile_desc = result.get("profile_desc", "")
 
-        return jsonify({
-            'gifts': gifts,
-            'dedication': dedication,
-            'profile_desc': profile_desc,
-            'remaining': max(0, 10 - session['request_count'])
-        })
+            session['request_count'] = session.get('request_count', 0) + 1
 
-    except Exception as e:
-        return jsonify({'error': f'Something went wrong: {str(e)}'}), 500
+            affiliate = "giftpickera00-20"
+            ebay_campaign = "5339153077"
+            ebay_publisher = "7298517"
+
+            for gift in gifts:
+                search = gift['amazon_search'].replace(' ', '+')
+                gift['amazon_url'] = f"https://amazon.com/s?k={search}&tag={affiliate}&language=en_US"
+                gift['ebay_url'] = f"https://www.ebay.com/sch/i.html?_nkw={search}&mkcid=1&mkrid=711-53200-19255-0&siteid=0&campid={ebay_campaign}&customid=&toolid=10001&mkevt=1&pub={ebay_publisher}"
+
+            yield f"data: {json.dumps({'type': 'done', 'gifts': gifts, 'dedication': dedication, 'profile_desc': profile_desc, 'remaining': max(0, 10 - session['request_count'])})}
+
+"
+
+        except Exception as e:
+            yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}
+
+"
+
+    return Response(stream_with_context(stream()), mimetype='text/event-stream',
+                    headers={'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no'})
 
 @app.route('/alternatives', methods=['POST'])
 def get_alternatives():
