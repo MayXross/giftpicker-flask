@@ -117,9 +117,8 @@ def generate():
                     # Count gift objects found so far to estimate progress
                     gifts_found = full_text.count('"name"')
                     progress = min(95, int((gifts_found / gift_count) * 90) + 5)
-                    yield f"data: {json.dumps({'type': 'progress', 'value': progress})}
-
-"
+                    chunk = json.dumps({"type": "progress", "value": progress})
+                    yield "data: " + chunk + "\n\n"
 
             # Parse complete response
             raw = full_text.strip()
@@ -144,14 +143,12 @@ def generate():
                 gift['amazon_url'] = f"https://amazon.com/s?k={search}&tag={affiliate}&language=en_US"
                 gift['ebay_url'] = f"https://www.ebay.com/sch/i.html?_nkw={search}&mkcid=1&mkrid=711-53200-19255-0&siteid=0&campid={ebay_campaign}&customid=&toolid=10001&mkevt=1&pub={ebay_publisher}"
 
-            yield f"data: {json.dumps({'type': 'done', 'gifts': gifts, 'dedication': dedication, 'profile_desc': profile_desc, 'remaining': max(0, 10 - session['request_count'])})}
-
-"
+            chunk = json.dumps({"type": "done", "gifts": gifts, "dedication": dedication, "profile_desc": profile_desc, "remaining": max(0, 10 - session['request_count'])})
+            yield "data: " + chunk + "\n\n"
 
         except Exception as e:
-            yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}
-
-"
+            chunk = json.dumps({"type": "error", "message": str(e)})
+            yield "data: " + chunk + "\n\n"
 
     return Response(stream_with_context(stream()), mimetype='text/event-stream',
                     headers={'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no'})
