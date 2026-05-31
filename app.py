@@ -106,7 +106,10 @@ def generate():
     def stream():
         full_text = ""
         try:
-            last_progress = 0
+            last_progress = 5
+            estimated_total = gift_count * 220
+            chunk = json.dumps({"type": "progress", "value": last_progress})
+            yield "data: " + chunk + "\n\n"
             with client.messages.stream(
                 model="claude-sonnet-4-6",
                 max_tokens=2500,
@@ -115,8 +118,7 @@ def generate():
             ) as stream_obj:
                 for text_chunk in stream_obj.text_stream:
                     full_text += text_chunk
-                    gifts_found = full_text.count('"name"')
-                    progress = min(95, int((gifts_found / gift_count) * 90) + 5)
+                    progress = min(93, int((len(full_text) / estimated_total) * 90) + 5)
                     if progress > last_progress:
                         last_progress = progress
                         chunk = json.dumps({"type": "progress", "value": progress})
