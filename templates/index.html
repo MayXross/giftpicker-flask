@@ -900,37 +900,66 @@ async function findGifts() {
     document.querySelectorAll('.step').forEach(s => s.classList.remove('active'));
     startLoading();
 
+    const payload = JSON.stringify({
+        recipient: state.recipient,
+        interests: state.interests,
+        relationship: state.relationship,
+        age: state.age,
+        personality: state.personality.join(', '),
+        budget: state.budget,
+        language: state.language,
+        category: state.categories.join(', ') || 'Any category',
+        occasion: state.occasion,
+        gift_count: state.giftCount,
+        tone: state.tone
+    });
+
     try {
         const res = await fetch('/generate', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                recipient: state.recipient,
-                interests: state.interests,
-                relationship: state.relationship,
-                age: state.age,
-                personality: state.personality.join(', '),
-                budget: state.budget,
-                language: state.language,
-                category: state.categories.join(', ') || 'Any category',
-                occasion: state.occasion,
-                gift_count: state.giftCount,
-                tone: state.tone
-            })
+            body: payload
         });
 
-        const data = await res.json();
-        stopLoading();
+        if (!res.ok) {
+            const err = await res.json();
+            stopLoading();
+            showError(err.error || 'Something went wrong.');
+            goToStep(3);
+            return;
+        }
 
-        if (!res.ok) { showError(data.error || 'Something went wrong.'); goToStep(3); return; }
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
 
-        state.gifts = data.gifts;
-        state.remaining = data.remaining;
-        state.keptGifts = [];
-        document.getElementById('remaining-count').textContent = data.remaining;
-
-        showProfile(data);
-
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('
+');
+            buffer = lines.pop();
+            for (const line of lines) {
+                if (!line.startsWith('data: ')) continue;
+                const msg = JSON.parse(line.slice(6));
+                if (msg.type === 'progress') {
+                    document.getElementById('loading-bar').style.width = msg.value + '%';
+                    document.getElementById('loading-pct').textContent = msg.value + '%';
+                } else if (msg.type === 'done') {
+                    stopLoading();
+                    state.gifts = msg.gifts;
+                    state.remaining = msg.remaining;
+                    state.keptGifts = [];
+                    document.getElementById('remaining-count').textContent = msg.remaining;
+                    showProfile(msg);
+                } else if (msg.type === 'error') {
+                    stopLoading();
+                    showError(msg.message || 'Something went wrong.');
+                    goToStep(3);
+                }
+            }
+        }
     } catch (e) {
         stopLoading();
         showError('Network error. Please try again.');
@@ -1030,7 +1059,31 @@ function dismissCard(card) {
         card.style.padding = '0';
         card.style.overflow = 'hidden';
     }, 300);
-    setTimeout(() => card.remove(), 700);
+    setTimeout(() => {
+        card.remove();
+        checkEmptyState();
+    }, 700);
+}
+
+function checkEmptyState() {
+    const container = document.getElementById('gifts-container');
+    const remaining = container.querySelectorAll('.gift-card').length;
+    if (remaining === 0) {
+        container.innerHTML = `
+        <div id="empty-state" style="text-align:center;padding:2.5rem 1rem;">
+            <div style="font-size:3rem;margin-bottom:0.75rem;">🎁</div>
+            <div style="font-size:1.1rem;font-weight:700;margin-bottom:0.4rem;color:var(--dark)">All gifts reviewed!</div>
+            <div style="font-size:0.9rem;color:var(--muted);margin-bottom:1.5rem;">Want to see more ideas for the same person?</div>
+            <button onclick="regenerateGifts()" style="background:var(--dark);color:#fff;border:none;border-radius:var(--radius);padding:0.85rem 2rem;font-size:0.95rem;font-weight:600;cursor:pointer;">
+                🔄 Generate more gifts
+            </button>
+        </div>`;
+    }
+}
+
+function regenerateGifts() {
+    document.getElementById('results-screen').classList.remove('active');
+    findGifts();
 }
 
 function keepGift(i) {
